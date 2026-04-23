@@ -1,6 +1,6 @@
 // ============================================================
 //  SAHIL 804 BOT — Realtime Database Utilities
-//  FIXED v4.2.0 — No duplicate Firebase init!
+//  FIXED v4.3.0 — No duplicate Firebase init + Getter destructuring bug fixed!
 //
 //  IMPORTANT: Firebase Admin SDK is initialized ONLY in
 //  src/firebase/config.js (single source of truth).
@@ -12,11 +12,13 @@
 
 // ── Import shared admin instance (already initialized) ──
 // Node.js require() is cached — same instance, no double-init
-const { admin, rtdb: db, initOk } = require('../firebase/config');
+// ✅ FIX: Do NOT destructure getters — use live reference instead
+const _fb = require('../firebase/config');
+const admin = _fb.admin;
 
 // ── Guard: if Firebase failed to init, all Realtime DB calls will throw cleanly ──
 function requireInit() {
-  if (!initOk || !db) {
+  if (!_fb.initOk || !_fb.rtdb) {
     throw new Error(
       '🔴 Realtime Database is not available — Firebase failed to initialize. ' +
       'Check FIREBASE_* environment variables.'
@@ -28,7 +30,7 @@ function requireInit() {
 
 async function createUser(userId, userData = {}) {
   requireInit();
-  const userRef = db.ref(`users/${userId}`);
+  const userRef = _fb.rtdb.ref(`users/${userId}`);
   await userRef.set({
     email:        userData.email        || '',
     phone:        userData.phone        || userData.whatsapp || '',
@@ -42,24 +44,24 @@ async function createUser(userId, userData = {}) {
 
 async function getUser(userId) {
   requireInit();
-  const snapshot = await db.ref(`users/${userId}`).once('value');
+  const snapshot = await _fb.rtdb.ref(`users/${userId}`).once('value');
   return snapshot.val();
 }
 
 async function approveUser(userId) {
   requireInit();
-  await db.ref(`users/${userId}/approved`).set(true);
+  await _fb.rtdb.ref(`users/${userId}/approved`).set(true);
 }
 
 async function getAllUsers() {
   requireInit();
-  const snapshot = await db.ref('users').once('value');
+  const snapshot = await _fb.rtdb.ref('users').once('value');
   return snapshot.val() || {};
 }
 
 async function setSubscription(userId, plan, expiresAt) {
   requireInit();
-  await db.ref(`users/${userId}/subscription`).set({
+  await _fb.rtdb.ref(`users/${userId}/subscription`).set({
     plan,
     expiresAt,
     botsUsed: 0,
@@ -68,7 +70,7 @@ async function setSubscription(userId, plan, expiresAt) {
 
 async function incrementBotCount(userId) {
   requireInit();
-  const ref      = db.ref(`users/${userId}/subscription/botsUsed`);
+  const ref      = _fb.rtdb.ref(`users/${userId}/subscription/botsUsed`);
   const snapshot = await ref.once('value');
   const current  = snapshot.val() || 0;
   await ref.set(current + 1);
@@ -78,19 +80,19 @@ async function incrementBotCount(userId) {
 
 async function getIslamicContent(type, id) {
   requireInit();
-  const snapshot = await db.ref(`islamic/${type}/${id}`).once('value');
+  const snapshot = await _fb.rtdb.ref(`islamic/${type}/${id}`).once('value');
   return snapshot.val();
 }
 
 async function getAllQuran() {
   requireInit();
-  const snapshot = await db.ref('islamic/quran').once('value');
+  const snapshot = await _fb.rtdb.ref('islamic/quran').once('value');
   return snapshot.val() || {};
 }
 
 async function getDuas() {
   requireInit();
-  const snapshot = await db.ref('islamic/duas').once('value');
+  const snapshot = await _fb.rtdb.ref('islamic/duas').once('value');
   return snapshot.val() || {};
 }
 
@@ -99,7 +101,7 @@ async function getDuas() {
 async function createWebsite(userId, data) {
   requireInit();
   const websiteId = Date.now().toString();
-  await db.ref(`websites/${websiteId}`).set({
+  await _fb.rtdb.ref(`websites/${websiteId}`).set({
     userId,
     ...data,
     createdAt: Date.now(),
@@ -109,7 +111,7 @@ async function createWebsite(userId, data) {
 
 async function getUserWebsites(userId) {
   requireInit();
-  const snapshot = await db.ref('websites')
+  const snapshot = await _fb.rtdb.ref('websites')
     .orderByChild('userId')
     .equalTo(userId)
     .once('value');
@@ -120,13 +122,13 @@ async function getUserWebsites(userId) {
 
 async function getAdminSettings() {
   requireInit();
-  const snapshot = await db.ref('admin/settings').once('value');
+  const snapshot = await _fb.rtdb.ref('admin/settings').once('value');
   return snapshot.val() || {};
 }
 
 async function updateOwnerImage(imageUrl) {
   requireInit();
-  await db.ref('admin/settings/ownerImage').set(imageUrl);
+  await _fb.rtdb.ref('admin/settings/ownerImage').set(imageUrl);
 }
 
 module.exports = {
