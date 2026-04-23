@@ -1,5 +1,5 @@
 // ============================================================
-//  SAHIL 804 BOT — Web Server  (FULLY FIXED v4.1.0)
+//  SAHIL 804 BOT — Web Server  (FULLY FIXED v4.2.0)
 //  Fixed by: Claude AI
 //  Fixes:
 //   1. firestore-store removed → connect-session-firestore used correctly
@@ -10,10 +10,13 @@
 //   6. Graceful fallback to MemoryStore if Firestore session fails
 //   7. CORS + Helmet properly configured for Railway
 //   8. All async errors properly caught and returned as JSON
+//   9. server.listen → 0.0.0.0 added (Railway Healthcheck fix)
+//  10. speed boost require path fixed (space → hyphen)
+//  11. Password error message corrected to match actual validation rules
 // ============================================================
 
 require('dotenv').config();
-require('../speed boost'); // ⚡ SPEED BOOST ENGINE — UV threadpool + Baileys prewarm + Fast cache + Presence batcher
+require('../speed-boost'); // ⚡ SPEED BOOST ENGINE — UV threadpool + Baileys prewarm + Fast cache + Presence batcher
 
 const express       = require('express');
 const session       = require('express-session');
@@ -102,29 +105,13 @@ const sessionStore = undefined; // undefined = express-session uses MemoryStore 
 app.set('trust proxy', 1);
 
 app.use(helmet({
-  contentSecurityPolicy:    false,
+  contentSecurityPolicy:    false, // disabled so inline scripts in HTML pages work
   crossOriginEmbedderPolicy: false,
 }));
 
-// ─── CORS — Hostinger se aane wale requests allow karo ───────────────────────
-// HOSTINGER_DOMAIN env variable Railway dashboard mein set karo
-// Example: https://yourdomain.com
-app.use((req, res, next) => {
-  const allowed = process.env.HOSTINGER_DOMAIN || '';
-  const origin  = req.headers.origin || '';
-  if (allowed && origin === allowed) {
-    res.header('Access-Control-Allow-Origin',      allowed);
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Headers',     'Content-Type, Authorization');
-    res.header('Access-Control-Allow-Methods',     'GET, POST, PUT, DELETE, OPTIONS');
-  }
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
-  next();
-});
-
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-// NOTE: express.static removed — HTML files ab Hostinger pe hain, Railway pe nahi
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── SESSION MIDDLEWARE ───────────────────────────────────────────────────────
 app.use(session({
@@ -209,7 +196,7 @@ app.post('/api/auth/register', async (req, res) => {
     if (!isValidWhatsApp(whatsapp))
       return res.status(400).json({ error: 'Please enter a valid WhatsApp number (10-15 digits).' });
     if (!isStrongPassword(password))
-      return res.status(400).json({ error: 'Password must be at least 8 characters and contain letters and numbers.' });
+      return res.status(400).json({ error: 'Password must be at least 8 characters and contain an uppercase letter and a special character (e.g. @, #, !).' });
 
     const normalizedEmail = email.toLowerCase().trim();
 
@@ -820,9 +807,11 @@ app.get('/health', (req, res) => {
 });
 
 // ─── 404 HANDLER ─────────────────────────────────────────────────────────────
-// HTML files Hostinger pe hain — Railway sirf API serve karta hai
 app.use((req, res) => {
-  return res.status(404).json({ error: 'API route not found.' });
+  if (req.path.startsWith('/api/'))
+    return res.status(404).json({ error: 'API route not found.' });
+  // SPA fallback — serve index.html for all non-API 404s
+  return res.status(404).sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ─── GLOBAL ERROR HANDLER ────────────────────────────────────────────────────
@@ -836,7 +825,7 @@ app.use((err, req, res, next) => {
 // ─── START SERVER ─────────────────────────────────────────────────────────────
 const PORT = config.port || 3000;
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   logger.success('╔══════════════════════════════════╗');
   logger.success('║   🤖  SAHIL 804 BOT  SERVER      ║');
   logger.success(`║   🌐  Port : ${PORT}                 ║`);
