@@ -1,6 +1,6 @@
 // ============================================================
 //  SAHIL 804 BOT — Baileys Auth State in Firebase RTDB
-//  NEW FILE v4.2.0
+//  FIXED v4.3.0
 //
 //  PURPOSE: Store WhatsApp session credentials in Firebase
 //  Realtime Database instead of filesystem.
@@ -8,6 +8,15 @@
 //  WHY: On Railway (and all cloud platforms), the filesystem
 //  is EPHEMERAL — it resets on every deploy/restart.
 //  Storing auth state in RTDB ensures sessions survive restarts.
+//
+//  BUG FIXED v4.3.0:
+//   ❌ OLD: const { rtdb, initOk } = require('../firebase/config')
+//      This destructures getter values at require() time — BEFORE
+//      Firebase IIFE finishes initializing. Result: rtdb = null,
+//      initOk = false FOREVER. Sessions were NEVER saved to RTDB.
+//   ✅ NEW: const _fb = require('../firebase/config')
+//      We use _fb.rtdb and _fb.initOk inline — live getter access
+//      every time, so the real initialized values are always used.
 //
 //  USAGE in launcher.js:
 //    const { useFirebaseAuthState } = require('../utils/firebaseAuthState');
@@ -25,7 +34,9 @@ async function loadBaileys() {
     BufferJSON    = b.BufferJSON;
   }
 }
-const { rtdb, initOk } = require('../firebase/config');
+// ✅ FIX: Do NOT destructure — getters must be accessed live via _fb.rtdb / _fb.initOk
+// Destructuring captures the value at require() time (before Firebase IIFE finishes) → always null/false
+const _fb = require('../firebase/config');
 
 // ─── HELPERS ─────────────────────────────────────────────
 
@@ -39,9 +50,9 @@ function rtdbPath(sessionId) {
  * Returns null if nothing is stored yet.
  */
 async function readSession(sessionId) {
-  if (!initOk || !rtdb) return null;
+  if (!_fb.initOk || !_fb.rtdb) return null;
   try {
-    const snap = await rtdb.ref(rtdbPath(sessionId)).once('value');
+    const snap = await _fb.rtdb.ref(rtdbPath(sessionId)).once('value');
     return snap.val();  // null if not found
   } catch (err) {
     console.warn(`[AuthState] Warning: could not read session ${sessionId}:`, err.message);
@@ -53,11 +64,11 @@ async function readSession(sessionId) {
  * Write a key-value pair to Firebase RTDB for this session.
  */
 async function writeKey(sessionId, key, value) {
-  if (!initOk || !rtdb) return;
+  if (!_fb.initOk || !_fb.rtdb) return;
   try {
     // Firebase keys cannot contain . # $ [ ]
     const safeKey = key.replace(/[.#$[\]]/g, '_');
-    await rtdb.ref(`${rtdbPath(sessionId)}/${safeKey}`).set(
+    await _fb.rtdb.ref(`${rtdbPath(sessionId)}/${safeKey}`).set(
       JSON.stringify(value, BufferJSON.replacer)
     );
   } catch (err) {
@@ -69,10 +80,10 @@ async function writeKey(sessionId, key, value) {
  * Delete a specific key for this session.
  */
 async function deleteKey(sessionId, key) {
-  if (!initOk || !rtdb) return;
+  if (!_fb.initOk || !_fb.rtdb) return;
   try {
     const safeKey = key.replace(/[.#$[\]]/g, '_');
-    await rtdb.ref(`${rtdbPath(sessionId)}/${safeKey}`).remove();
+    await _fb.rtdb.ref(`${rtdbPath(sessionId)}/${safeKey}`).remove();
   } catch (err) {
     console.warn(`[AuthState] Warning: could not delete key ${key}:`, err.message);
   }
@@ -82,9 +93,9 @@ async function deleteKey(sessionId, key) {
  * Delete ALL data for a session (called when bot is deleted or logged out).
  */
 async function clearSession(sessionId) {
-  if (!initOk || !rtdb) return;
+  if (!_fb.initOk || !_fb.rtdb) return;
   try {
-    await rtdb.ref(rtdbPath(sessionId)).remove();
+    await _fb.rtdb.ref(rtdbPath(sessionId)).remove();
     console.log(`[AuthState] Session data cleared: ${sessionId}`);
   } catch (err) {
     console.warn(`[AuthState] Warning: could not clear session ${sessionId}:`, err.message);
@@ -105,7 +116,7 @@ async function useFirebaseAuthState(sessionId) {
   await loadBaileys();
   // ── Load existing session data ──
   let stored = null;
-  if (initOk && rtdb) {
+  if (_fb.initOk && _fb.rtdb) {
     stored = await readSession(sessionId);
   }
 
@@ -130,9 +141,9 @@ async function useFirebaseAuthState(sessionId) {
         const safeKey = rawKey.replace(/[.#$[\]]/g, '_');
         // Live RTDB read — NOT stale snapshot — so newly written keys are visible
         let raw = null;
-        if (initOk && rtdb) {
+        if (_fb.initOk && _fb.rtdb) {
           try {
-            const snap = await rtdb.ref(`${rtdbPath(sessionId)}/${safeKey}`).once('value');
+            const snap = await _fb.rtdb.ref(`${rtdbPath(sessionId)}/${safeKey}`).once('value');
             raw = snap.val();
           } catch { /* ignore — treat as missing */ }
         }
