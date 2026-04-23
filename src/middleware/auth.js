@@ -40,7 +40,7 @@ async function comparePassword(plain, hashed) {
 }
 
 // ─── PASSWORD STRENGTH CHECK ──────────────────────────────
-// BUG FIX: requires minimum 8 chars + at least one uppercase + one special char
+// Password validation: min 8 chars + uppercase + special character
 function isStrongPassword(password) {
   if (!password || password.length < 8)  return false;  // ✅ minimum 8 characters enforced
   if (!/[A-Z]/.test(password))           return false;  // ✅ uppercase enforced
